@@ -3,7 +3,9 @@ title: "PeerReviewAssignmentWeek2"
 author: "JKK"
 date: "December 5, 2017"
 output: html_document
+
 ---
+
 ###Read file and understand contents of it.
 ```{r}
 setwd("C:/Users/JKK/Assignments/reproducible data")
@@ -11,7 +13,6 @@ library(RCurl)
 activity<- read.csv("./activity.csv")
 head(activity)
 str(activity)
-summarize(activity)
 dim(activity)
 class(activity)
 ```
@@ -120,7 +121,7 @@ head(weekend)
 ```
 Note: used coding strategy as outlined here.  https://rstudio-pubs-static.s3.amazonaws.com/208975_082753bcf8164a08b288d6b28915ce20.html
 
-```{r}
+Note: the code below works, but there is sa kntr error message
 weekdays <- ActivityPlus[ActivityPlus$weekend=="Weekday",]
 weekend <- ActivityPlus[ActivityPlus$weekend=="Weekend",]
 head(weekdays)
@@ -133,17 +134,13 @@ WeekendIntervals <- group_by(weekend, interval)
 WeekendIntervals$weekend <- "Weekend"
 head(WeekendIntervals)
 
+
 ActivityInterval <- rbind(WeekdayIntervals, WeekendIntervals)
 ActivityInterval$weekend <- as.factor(ActivityInterval$weekend)
 head(ActivityInterval)
 
-```
 
 Plot series
+Note: the code below works, but there is sa kntr error message
 
-```{r}
-ggplot(ActivityInterval, aes(interval, steps)) + geom_line() + 
-    facet_grid(weekend ~ .)+ggtitle("Average # of steps by interval") +
-    theme(panel.background = element_blank(),
-          legend.key=element_blank())
-```
+ggplot(ActivityInterval, aes(interval, steps))+ geom_line()+facet_grid(weekend ~ .)+ggtitle("Average # of steps by interval")+theme(panel.background =element_blank(),legend.key=element_blank())
