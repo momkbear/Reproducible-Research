@@ -1,0 +1,178 @@
+---
+title: "Tornados Cause the Most Harm to People, Floods Cause the Greasted Economic Consequences"
+author: "Julie Kaplan"
+date: "December 22, 2017"
+output: html_document
+---
+#Synopsis
+This analysis demostrates the impact of significant weather events in terms of danger to people and economic damages.  The data was collected by NOAA between 1950 and 2011.  For analytic purposes, only data collected after 11/28/1991 was reviewed. 
+
+To explore, this analysis set out to answer two questions:
+1)  Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+2)  Across the United States, which types of events have the greatest economic consequences?
+
+#Processing and analysis used to answer the questions.
+##Data processing
+The source data can be found [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2),documentation about the original data set can be found [here.]( https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+Once the file was downloaded, appropriate libraries were installed and the file was read and stored as follows. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/JKK/Assignments/reproducible data")
+library(RCurl)
+library(R.utils)
+library(dplyr)
+library(ggplot2)
+```
+libraries loaded:
+* RCurl
+* R.utils
+* dplyr
+* ggplot2
+```{r}
+
+StormData<- bunzip2("StormData.csv.bz2", "StormData.csv", remove = FALSE, skip = TRUE)
+StormData<-read.csv(StormData, stringsAsFactors = FALSE)
+```
+
+##Data Transformations
+Started by taking a look a the contents of the file using:
+* str(StormData)
+* head(StormData)
+* summary(StormData)
+* names(StormData)
+
+###Reformat and Trim the Data
+It appears as if some of the older data in the file is spotty.  Plus I just wanted to learn about recent weather events.  To limit data to last 20 years, first the date field needed to be converted from a character vector to a date. 
+
+After that the data was trimmed to only include the last 20 years (most recent date in file was 11/28/2011) and only those columns needed to answer the first question.  Observations w/NA were omitted from the resulting dataset as well.
+```{r}  
+StormData$BGN_DATE<-as.Date(StormData$BGN_DATE, format = "%m/%d/%Y")
+TrimStormData<-StormData[StormData$FATALITIES > 0 & StormData$INJURIES > 0 &
+                         StormData$BGN_DATE>"1991-11-28",
+                         c('EVTYPE','FATALITIES','INJURIES')]
+TrimStormData<-na.omit(TrimStormData)
+head(TrimStormData)
+```
+
+Using similar logic, the data set is trimmed again, this time including the columns necessary for evaluation economic consequences.  There were two data points that, together, represent economic information: damage to property and, damage to crops.  
+```{r}
+StormDataEcon <- StormData[StormData$PROPDMG > 0 & StormData$CROPDMG > 0 &
+                         StormData$BGN_DATE>"1991-11-28", c('EVTYPE','PROPDMG','PROPDMGEXP','CROPDMG','CROPDMGEXP')]
+StormDataEcon <- na.omit(StormDataEcon)
+head(StormDataEcon)
+```
+According to the Storm Data Documentation guidance [found here](http://rstudio-pubs-static.s3.amazonaws.com/58957_37b6723ee52b455990e149edde45e5b6.html), we understand how to treat the PROPDMGEX and CROPDMGEXP fields which are not defined in the source document.
+
+For the purposes of this analysis, I'm assuming his conclusion (supported by evidence) that the conclusions outlined there are correct and the notations represent the appropriate multiple.  A summary is below:
+
+* H or h = 100 
+* K or k = 1000
+* M or m = 1000000
+* B or b = 1000000000
+* + = 1
+* - = 0
+* ? = 0
+* empty field = 0
+* number entery = 10
+
+Now the PROPDMG and CROPDMG fields need to be reculated based on the appropriate multiple, so the property damage and crop damage figures can be compared by event to each other.
+```{r}
+StormDataEcon1 <- subset(StormDataEcon,as.numeric(StormDataEcon$PROPDMG)!=0) 
+y<- length(StormDataEcon1$PROPDMG)
+x<- 1
+
+while(x<=y){
+    StormDataEcon1$PropertyDamage[[x]] <- as.numeric(StormDataEcon1$PROPDMG[[x]])*
+        if (toupper(StormDataEcon1$PROPDMGEXP[[x]])=="B") 100000000 else 
+        if (toupper(StormDataEcon1$PROPDMGEXP[[x]])=="M") 1000000 else 
+        if (toupper(StormDataEcon1$PROPDMGEXP[[x]])=="K") 1000 else 
+        if (toupper(StormDataEcon1$PROPDMGEXP[[x]])=="H") 100 else 
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="-" || StormDataEcon1$PROPDMGEXP[[x]]=="+") 0 else 
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="2") 100 else 
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="3") 1000 else   
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="4") 10000 else  
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="5") 100000 else
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="6") 1000000 else 
+        if (StormDataEcon1$PROPDMGEXP[[x]]=="7") 10000000 else 1
+        x<-x+1}
+
+
+StormDataEcon1 <- data.frame(Event = StormDataEcon1$EVTYPE,PropertyDamage = StormDataEcon1$PropertyDamage)
+StormDataEcon2 <- aggregate(PropertyDamage ~ Event,StormDataEcon1,sum)
+StormDataEcon3 <- arrange(StormDataEcon2,desc(PropertyDamage))
+StormDataEcon4<-head(StormDataEcon3)
+```
+Apply same logic to crop damage that we used to calculate property damage.
+```{r}
+StormDataCrop <- subset(StormDataEcon,as.numeric(StormDataEcon$CROPDMG)!=0) 
+y<- length(StormDataCrop$CROPDMG)
+x<- 1
+
+while(x<=y){
+    StormDataCrop$CropDamage[[x]] <- as.numeric(StormDataCrop$CROPDMG[[x]])*
+        if (toupper(StormDataCrop$CROPDMGEXP[[x]])=="B") 100000000 else 
+        if (toupper(StormDataCrop$CROPDMGEXP[[x]])=="M") 1000000 else 
+        if (toupper(StormDataCrop$CROPDMGEXP[[x]])=="K") 1000 else 
+        if (toupper(StormDataCrop$CROPDMGEXP[[x]])=="H") 100 else 
+        if (StormDataCrop$CROPDMGEXP[[x]]=="-" || StormDataCrop$CROPDMGEXP[[x]]=="+") 0 else 
+        if (StormDataCrop$CROPDMGEXP[[x]]=="2") 100 else 
+        if (StormDataCrop$CROPDMGEXP[[x]]=="3") 1000 else   
+        if (StormDataCrop$CROPDMGEXP[[x]]=="4") 10000 else  
+        if (StormDataCrop$CROPDMGEXP[[x]]=="5") 100000 else
+        if (StormDataCrop$CROPDMGEXP[[x]]=="6") 1000000 else 
+        if (StormDataCrop$CROPDMGEXP[[x]]=="7") 10000000 else 1
+    x<-x+1}
+
+
+StormDataCrop <- data.frame(Event = StormDataCrop$EVTYPE,CropDamage = StormDataCrop$CropDamage)
+StormDataCrop1 <- aggregate(CropDamage~ Event,StormDataCrop,sum)
+StormDataCrop2 <- arrange(StormDataCrop1,desc(CropDamage))
+StormDataCrop3<-head(StormDataCrop2)
+```
+
+#Results
+
+##Tornados have the most fatalities and the most injuries.
+```{r}
+EventType<-aggregate(.~EVTYPE, TrimStormData, sum)
+EventTypeFatalities<-EventType[order(EventType$FATALITIES, decreasing = TRUE),]
+head(EventTypeFatalities)
+EventTypeInjuries<-EventType[order(EventType$INJURIES, decreasing = TRUE),]
+head(EventTypeInjuries)
+```
+
+
+
+##Floods have the greatest economic impact.
+Floods have the greatest economic impact in terms of property damage and crop damage.
+```{r pressure, echo=FALSE}
+PlotEcon<-ggplot(StormDataEcon4, aes(x = Event, y = PropertyDamage/1000000000)) + 
+    geom_bar(stat = "identity", fill ="navy")+ylab("Propery Damage $ (billions)")+
+    ggtitle(expression(atop("Weather Events that cause Most Property Damage", atop(italic("1991 - 2011")))))+
+    theme(axis.text.x =
+              element_text(size  = 10,
+                           angle = 45,
+                           hjust = 1,
+                           vjust = 1))+
+    theme(panel.background = element_blank(),
+          legend.key=element_blank())
+print(PlotEcon)
+
+PlotCrop<-ggplot(StormDataCrop3, aes(x = Event, y = CropDamage/100000000)) + 
+    geom_bar(stat = "identity", fill ="dark green")+ylab("Crop Damage $ (billions)")+
+    ggtitle(expression(atop("Weather Events that cause Most Crop Damage", atop(italic("1991 - 2011")))))+
+    theme(axis.text.x =
+              element_text(size  = 10,
+                           angle = 45,
+                           hjust = 1,
+                           vjust = 1))+
+    theme(panel.background = element_blank(),
+          legend.key=element_blank())
+print(PlotCrop)
+```
+
+
+
+
